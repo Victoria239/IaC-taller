@@ -427,40 +427,142 @@ mientras que el directorio .terraform y el state están ignorados.
 
 ### Evidencias
 
-Pendiente de ejecución.
+#### Aplicación sin cambios
 
-Registrar:
-- Resultado de apply sin cambios.
-- terraform state list.
-- Información no sensible de terraform state show.
-- Valor de serial antes y después del cambio.
-- Plan de reemplazo por cambio de imagen y aprobación del revisor.
-- Resultado de apply y plan final sin cambios.
-- Commit de la fase.
+Se ejecutó terraform apply sin modificar la configuración:
 
-No incorporar el archivo de state al repositorio.
+```text
+No changes. Your infrastructure matches the configuration.
+
+Apply complete! Resources: 0 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+url = "http://localhost:8080"
+```
+
+#### Consulta del state
+
+```text
+> terraform state list
+docker_container.web
+docker_image.nginx
+```
+
+terraform state show docker_container.web mostró información del
+contenedor, incluyendo su identificador, imagen, hostname, IP,
+comando de inicio, red y puertos.
+
+Valores iniciales consultados:
+
+```text
+serial: 4
+lineage: 007623a2-3a5e-36fe-a9a3-49a38040e69a
+```
+
+#### Recuperación después de reiniciar el computador
+
+Al retomar el taller, Docker mostró web-gN detenido:
+
+```text
+Exited (255)
+```
+
+Terraform detectó must_run = false -> true y cambios de puertos
+que forzaban el reemplazo:
+
+```text
+Plan: 1 to add, 0 to change, 1 to destroy.
+```
+
+Se ejecutó terraform apply y se confirmó con yes:
+
+```text
+Apply complete! Resources: 1 added, 0 changed, 1 destroyed.
+```
+
+El plan posterior no mostró cambios. El serial quedó en 7 y
+lineage permaneció igual.
+
+Aprobación del revisor: pendiente de registrar lo ocurrido realmente.
+
+#### Actualización de nginx
+
+Se cambió en main.tf:
+
+```hcl
+name = "nginx:1.28-alpine"
+```
+
+El plan marcó ambos recursos con -/+ y forces replacement:
+
+```text
+docker_container.web must be replaced
+docker_image.nginx must be replaced
+
+Plan: 2 to add, 0 to change, 2 to destroy.
+```
+
+Aprobación del revisor: pendiente de registrar lo ocurrido realmente.
+
+Después de la actualización, terraform plan mostró:
+
+```text
+docker_image.nginx: Refreshing state... [id=sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236nginx:1.28-alpine]
+docker_container.web: Refreshing state... [id=531bc04ca6a4c18d49c2ecc81fbd1e75e2f3c8ae7ca0cb09b0bfc38e4ef85839]
+
+No changes. Your infrastructure matches the configuration.
+```
+
+Valores posteriores:
+
+```text
+serial: 12
+lineage: 007623a2-3a5e-36fe-a9a3-49a38040e69a
+```
+
+Pendiente: incorporar la salida final del apply de actualización
+si se conserva en la terminal.
 
 ### Respuestas
 
 1. ¿Qué respondió Terraform al aplicar sin cambios y en qué se diferencia del segundo docker run de la fase 1?
 
-   Pendiente.
+   Respondió que no había diferencias y terminó con cero recursos
+   creados, modificados o destruidos. Terraform reconoció que el
+   estado deseado ya estaba satisfecho. El segundo docker run
+   intentó crear otro contenedor y falló por conflicto de nombre.
 
 2. ¿Qué datos guarda el state que no escribieron en main.tf y para qué los necesita Terraform?
 
-   Pendiente.
+   Guarda identificadores de los recursos y atributos obtenidos
+   del provider, como hostname, IP y datos de red. Vincula las
+   direcciones del código, como docker_container.web, con los
+   recursos reales para consultarlos y planificar sus cambios.
 
-3. ¿Por qué el cambio de imagen reemplazó el contenedor en lugar de modificarlo? Relacionarlo con infraestructura mutable e inmutable.
+3. ¿Por qué el cambio de imagen reemplazó el contenedor en lugar de modificarlo?
 
-   Pendiente.
+   El provider considera que cambiar la imagen requiere reemplazar
+   el contenedor. Terraform destruyó el anterior y creó uno basado
+   en la nueva imagen, siguiendo el enfoque de infraestructura
+   inmutable en lugar de actualizar software dentro del contenedor.
 
 4. ¿Cómo cambió serial después del apply y qué representa?
 
-   Pendiente.
+   Inicialmente era 4. Después de recuperar el servidor tras el
+   reinicio pasó a 7. Tras actualizar nginx pasó de 7 a 12.
+   Es un contador de revisiones del state: puede incrementarse
+   varias veces durante una operación, por lo que no equivale
+   al número de comandos apply ejecutados.
+   Lineage se mantuvo igual e identifica la misma historia del state.
 
 5. En un proyecto con bases de datos, ¿qué riesgo habría si el state se subiera a Git?
 
-   Pendiente.
+   Puede contener contraseñas, cadenas de conexión y otros datos
+   sensibles. Subirlo a Git podría exponerlos y conservarlos en el
+   historial incluso después de borrarlos de la versión actual.
+   Por eso se excluye del repositorio.
+
 
 ## Fase 4 - Drift
 
