@@ -186,37 +186,113 @@ La carpeta infra está vacía en esta etapa. Git no registra carpetas vacías.
 - Pendiente: realizar el commit fase-0.
 - Pendiente: registrar el identificador del commit y el estado posterior de Git.
 
-### Respuestas
-
-La fase 0 no contiene preguntas en la guía.
-
 ## Fase 1 - Arranque manual
 
 ### Evidencias
 
-Pendiente de ejecución.
+Se creó un servidor nginx mediante un comando imperativo:
 
-Registrar:
-- Creación del servidor manual y verificación de la página.
-- Error al repetir el mismo nombre.
-- Error al usar otro nombre con el mismo puerto.
-- Eliminación de los contenedores de prueba.
-- Objetivo escrito como pasos imperativos y como frase declarativa.
-- Verificación de limpieza y commit de la fase.
+```powershell
+docker run -d --name clickops-gN -p 8090:80 nginx:1.27-alpine
+```
+
+Se abrió http://localhost:8090 y se verificó que apareció
+la página «Welcome to nginx!».
+
+#### Repetición con el mismo nombre
+
+Se ejecutó nuevamente el mismo comando:
+
+```powershell
+docker run -d --name clickops-gN -p 8090:80 nginx:1.27-alpine
+```
+
+Fragmentos relevantes del error:
+
+```text
+Conflict. The container name "/clickops-gN" is already in use
+You have to remove (or rename) that container to be able to reuse that name.
+```
+
+#### Otro nombre con el mismo puerto
+
+```powershell
+docker run -d --name clickops-gN-2 -p 8090:80 nginx:1.27-alpine
+```
+
+Fragmento relevante del error:
+
+```text
+Bind for 0.0.0.0:8090 failed: port is already allocated
+```
+
+Docker creó el segundo contenedor, pero no pudo iniciarlo
+porque el puerto 8090 ya estaba asignado al primero.
+
+#### Limpieza
+
+```text
+PS C:\Users\victo\Documents\iac-taller-gN> docker rm -f clickops-gN clickops-gN-2
+clickops-gN
+clickops-gN-2
+```
+
+Comprobación posterior:
+
+```text
+PS C:\Users\victo\Documents\iac-taller-gN> docker ps -a --filter "name=clickops-gN"
+CONTAINER ID   IMAGE   COMMAND   CREATED   STATUS   PORTS   NAMES
+```
+
+La consulta no devolvió contenedores del experimento.
+
+#### Objetivo expresado de forma imperativa
+
+1. Usar la imagen nginx:1.27-alpine.
+2. Crear un contenedor llamado clickops-gN.
+3. Publicar el puerto 80 del contenedor en el puerto 8090 del computador.
+4. Iniciar el contenedor en segundo plano.
+5. Abrir http://localhost:8090 para comprobar su funcionamiento.
+
+#### Objetivo expresado de forma declarativa
+
+Quiero un servidor nginx:1.27-alpine en ejecución, llamado
+clickops-gN y accesible mediante http://localhost:8090.
 
 ### Respuestas
 
 1. ¿Qué error produjo el segundo docker run? ¿Qué dice eso sobre la idempotencia de un comando imperativo?
 
-   Pendiente.
+   Docker informó que el nombre clickops-gN ya estaba en uso.
+   En este experimento, docker run no fue idempotente: al repetirlo,
+   intentó crear otro contenedor en lugar de reconocer que el servidor
+   solicitado ya existía. Al cambiar el nombre, apareció otro conflicto,
+   porque el puerto 8090 seguía ocupado.
 
 2. Si otro grupo necesitara mañana un servidor idéntico, ¿qué tendrían que contarle y dónde quedó registrado lo que hicieron?
 
-   Pendiente.
+   Tendríamos que indicar la imagen y su versión, el nombre del
+   contenedor, la relación de puertos y el comando de ejecución.
+   Inicialmente esas instrucciones quedaron en la terminal; ahora
+   también están registradas en esta bitácora. Todavía no existe
+   una configuración declarativa que gestione el servidor.
 
 3. ¿Cuáles de los cuatro puntos de la diapositiva «Por qué duele» vivieron en esta fase?
 
-   Pendiente.
+   Observamos directamente la posibilidad de errores y la dificultad
+   de repetir el procedimiento sin considerar el estado existente:
+   aparecieron conflictos de nombre y puerto.
+
+   Los comandos ejecutados tampoco quedaron registrados automáticamente
+   en el historial de Git. Tuvimos que documentarlos en esta bitácora.
+   Sin ese registro, el conocimiento del procedimiento dependería de
+   quien lo ejecutó.
+
+   En esta práctica breve no comprobamos una lentitud significativa.
+   Además, un procedimiento manual puede reproducirse con suficiente
+   documentación y un entorno preparado, pero exige coordinar esos
+   detalles manualmente.
+
 
 ## Fase 2 - Primer despliegue
 
