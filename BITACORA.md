@@ -568,30 +568,153 @@ si se conserva en la terminal.
 
 ### Evidencias
 
-Pendiente de ejecución.
+Se realizaron tres modificaciones manuales permitidas por la guía
+para comprobar qué cambios detecta Terraform.
 
 | Experimento | ¿El plan lo detectó? | ¿Qué propuso Terraform? | ¿Cómo quedó corregido? |
 |---|---|---|---|
-| A - Apagar | Pendiente | Pendiente | Pendiente |
-| B - Borrar | Pendiente | Pendiente | Pendiente |
-| C - Cambiar por dentro | Pendiente | Pendiente | Pendiente |
+| A - Apagar | Sí | Reemplazar el contenedor: 1 a crear y 1 a destruir | Se aplicó el plan y el plan posterior quedó sin cambios |
+| B - Borrar | Sí | Crear el contenedor faltante: 1 a crear, sin destrucciones | Se recreó y se verificó la página de nginx y el plan sin cambios |
+| C - Cambiar por dentro | No | No propuso cambios | Se forzó el reemplazo con -replace; el plan posterior quedó sin cambios |
 
-Registrar planes, aprobaciones, correcciones, regreso de la página
-de bienvenida, plan final sin cambios y commit de la fase.
+#### Experimento A - Apagar el servidor
+
+```powershell
+docker stop web-gN
+terraform plan
+```
+
+El plan detectó must_run = false -> true y atributos de puertos
+marcados con forces replacement:
+
+```text
+Plan: 1 to add, 0 to change, 1 to destroy.
+```
+
+Se ejecutó terraform apply y se confirmó con yes:
+
+```text
+Apply complete! Resources: 1 added, 0 changed, 1 destroyed.
+```
+
+El plan posterior respondió:
+
+```text
+No changes. Your infrastructure matches the configuration.
+```
+
+Aprobación del revisor: pendiente de registrar lo ocurrido realmente.
+
+#### Experimento B - Borrar el servidor
+
+```powershell
+docker rm -f web-gN
+terraform plan -refresh-only
+terraform plan
+```
+
+El plan refresh-only informó:
+
+```text
+Note: Objects have changed outside of Terraform
+
+# docker_container.web has been deleted
+```
+
+Este plan solo mostró cómo había cambiado la infraestructura respecto
+al state; no propuso recrear el contenedor.
+
+El plan normal propuso recuperar el recurso definido en el código:
+
+```text
+Plan: 1 to add, 0 to change, 0 to destroy.
+```
+
+Después de la recuperación, el plan respondió:
+
+```text
+No changes. Your infrastructure matches the configuration.
+```
+
+Se verificó que localhost:8080 mostraba la bienvenida de nginx.
+
+Aprobación del revisor: pendiente de registrar lo ocurrido realmente.
+
+#### Experimento C - Cambiar contenido interno
+
+```powershell
+docker exec web-gN sh -c "echo '<h1>Cambio manual</h1>' > /usr/share/nginx/html/index.html"
+terraform plan
+```
+
+La página mostró «Cambio manual», pero Terraform respondió:
+
+```text
+No changes. Your infrastructure matches the configuration.
+```
+
+Para restaurar el contenido mediante infraestructura inmutable,
+se solicitó el reemplazo completo.
+
+El primer intento sin comillas produjo:
+
+```text
+Error: Invalid force-replace address "docker_container"
+Resource specification must include a resource type and name.
+```
+
+Se corrigió pasando el argumento completo entre comillas en PowerShell:
+
+```powershell
+terraform apply "-replace=docker_container.web"
+```
+
+Se confirmó con yes y el resultado fue:
+
+```text
+Apply complete! Resources: 1 added, 0 changed, 1 destroyed.
+
+Outputs:
+
+url = "http://localhost:8080"
+```
+
+El plan posterior respondió:
+
+```text
+No changes. Your infrastructure matches the configuration.
+```
+
+Aprobación del revisor y resumen del plan previo al reemplazo:
+pendiente de registrar lo ocurrido realmente.
+
+Verificación final de la bienvenida de nginx en el navegador:
+pendiente de confirmar.
 
 ### Respuestas
 
 1. ¿Por qué Terraform no detectó el experimento C? ¿Qué tipo de herramienta de «Aprovisionar ≠ configurar» atiende ese nivel?
 
-   Pendiente.
+   La configuración gestiona la imagen y el contenedor, pero no
+   comprueba el contenido del archivo HTML dentro de él. Modificar
+   ese archivo no cambió los atributos que el provider compara
+   en este caso. Las herramientas de gestión de configuración,
+   como Ansible, Chef o Puppet, pueden gestionar archivos y
+   configuración dentro de los servidores.
 
-2. ¿Por qué -replace es una corrección coherente con infraestructura inmutable?
+2. ¿Por qué -replace es una corrección coherente con la infraestructura inmutable?
 
-   Pendiente.
+   Porque elimina el contenedor modificado y crea uno nuevo desde
+   la imagen declarada, recuperando su contenido original.
+   No intenta reparar manualmente el contenedor existente.
 
-3. ¿Cómo detectarían drift sin esperar a que alguien ejecute plan por casualidad?
+3. ¿Cómo detectarían el drift sin esperar a que alguien ejecute plan por casualidad?
 
-   Pendiente.
+   Programaríamos planes periódicos en un pipeline y notificaciones
+   cuando aparezcan diferencias, para revisarlas antes de aplicar.
+   Complementaríamos esos planes con verificaciones de configuración
+   y monitoreo para cambios internos que Terraform no detecta.
+
 
 ## Fase 5 - Flexibilidad
 
