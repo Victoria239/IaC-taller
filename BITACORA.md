@@ -965,46 +965,324 @@ El reto opcional de migración con for_each y moved no se ha realizado.
 
 ### Evidencias
 
-Pendiente de ejecución.
+El número de grupo sigue pendiente de asignación. Se utiliza 0
+como valor provisional.
 
-Registrar:
-- Creación del backend PostgreSQL sin revelar credenciales.
-- Migración del state y terraform state list.
-- Consulta de la tabla states.
-- Prueba de bloqueo con dos terminales y cancelación de la operación.
-- Plan y aprobación de destrucción del workspace default.
-- Creación y despliegue de dev, staging y prod.
-- Workspace y aprobación antes de cada apply.
-- Verificación de siete sitios y versiones de imagen por ambiente.
-- Filas de states después de crear los ambientes.
-- Comprobación de ausencia de secretos.
-- Commit de la fase.
+#### Backend PostgreSQL
+
+Se creó el contenedor tf-state-g0 con postgres:17-alpine,
+publicando el puerto 5433 del computador hacia el 5432 del contenedor.
+
+La contraseña se generó en una variable de PowerShell y se pasó
+a Docker mediante una variable de entorno. La conexión de Terraform
+se definió en PG_CONN_STR, sin escribir sus credenciales en archivos
+del repositorio.
+
+Comprobación de disponibilidad:
+
+```text
+> docker exec tf-state-g0 pg_isready -U terraform -d terraform_backend
+/var/run/postgresql:5432 - accepting connections
+```
+
+#### Migración del state
+
+Se agregó al bloque terraform:
+
+```hcl
+backend "pg" {}
+```
+
+Se ejecutó:
+
+```powershell
+terraform init -migrate-state
+```
+
+Terraform detectó el state local y preguntó si debía copiarlo
+al backend pg. Se respondió yes.
+
+La inicialización terminó correctamente y reutilizó el provider
+kreuzwerker/docker v4.6.0.
+
+```text
+> terraform state list
+data.docker_network.bridge
+module.blog.docker_container.this
+module.blog.docker_image.this
+module.docs.docker_container.this
+module.docs.docker_image.this
+module.tienda.docker_container.this
+module.tienda.docker_image.this
+```
+
+La primera consulta a PostgreSQL mostró:
+
+```text
+ id |  name
+----+---------
+  1 | default
+(1 row)
+```
+
+#### Prueba de bloqueo
+
+Se abrió una segunda terminal que heredó PG_CONN_STR.
+
+En la primera se ejecutó:
+
+```powershell
+terraform apply "-replace=module.tienda.docker_container.this"
+```
+
+Se dejó esperando la confirmación, sin aplicar el reemplazo.
+Se utilizó esta propuesta para mantener una operación abierta,
+porque un apply sin cambios no se detendría a pedir confirmación.
+
+En la segunda terminal se ejecutó terraform plan:
+
+```text
+Error: Error acquiring the state lock
+Error message: Workspace is already locked: default
+```
+
+Se canceló la operación de la primera terminal:
+
+```text
+Apply cancelled.
+```
+
+Después se ejecutó terraform plan y terminó sin error de bloqueo:
+
+```text
+No changes. Your infrastructure matches the configuration.
+```
+
+No se aplicó el reemplazo de prueba.
+
+#### Limpieza del workspace default
+
+Antes de configurar los nuevos ambientes, se revisó:
+
+```text
+Plan: 0 to add, 0 to change, 6 to destroy.
+```
+
+Se destruyeron los tres contenedores y los tres recursos de imagen
+gestionados en default:
+
+```text
+Destroy complete! Resources: 6 destroyed.
+```
+
+terraform state list no mostró recursos. Se comprobó que el backend
+tf-state-g0 seguía en ejecución.
+
+Aprobación del revisor: pendiente de registrar lo ocurrido realmente.
+
+#### Configuración de ambientes
+
+Se definieron los ambientes en locals.tf y una llamada al módulo
+sitio con for_each.
+
+| Ambiente | Sitios | Puertos | Imagen |
+|---|---|---|---|
+| dev | tienda | 8101 | nginx:1.28-alpine |
+| staging | tienda, blog y docs | 8201, 8202 y 8203 | nginx:1.28-alpine |
+| prod | tienda, blog y docs | 8301, 8302 y 8303 | nginx:1.27-alpine |
+
+Se completaron los tres TODO:
+- Imagen diferenciada por ambiente.
+- Uso de local.amb.imagen en la llamada al módulo.
+- Output urls construido recorriendo module.sitio.
+
+#### Despliegue de dev
+
+Se creó y seleccionó el workspace dev.
+terraform validate respondió que la configuración era válida.
+
+```text
+Plan: 2 to add, 0 to change, 0 to destroy.
+
+Apply complete! Resources: 2 added, 0 changed, 0 destroyed.
+```
+
+```text
+> terraform output urls
+{
+  "tienda" = "http://localhost:8101"
+}
+```
+
+El plan posterior no mostró cambios.
+
+Aprobación del revisor: pendiente de registrar lo ocurrido realmente.
+Verificación HTTP de dev: pendiente de registrar su comprobación.
+
+#### Despliegue de staging
+
+El plan propuso:
+
+```text
+Plan: 6 to add, 0 to change, 0 to destroy.
+```
+
+Después del despliegue:
+
+```text
+> terraform output urls
+{
+  "blog" = "http://localhost:8202"
+  "docs" = "http://localhost:8203"
+  "tienda" = "http://localhost:8201"
+}
+```
+
+```text
+No changes. Your infrastructure matches the configuration.
+```
+
+Se verificó en el navegador la página de documentación en 8203,
+con el mensaje de STAGING.
+
+La salida final del apply no se conservó en las evidencias compartidas.
+Aprobación del revisor: pendiente de registrar lo ocurrido realmente.
+Verificación HTTP de tienda y blog: pendiente de registrar.
+
+#### Despliegue de prod
+
+El plan propuso:
+
+```text
+Plan: 6 to add, 0 to change, 0 to destroy.
+```
+
+Después del despliegue:
+
+```text
+> terraform workspace show
+prod
+
+> terraform output urls
+{
+  "blog" = "http://localhost:8302"
+  "docs" = "http://localhost:8303"
+  "tienda" = "http://localhost:8301"
+}
+```
+
+```text
+No changes. Your infrastructure matches the configuration.
+```
+
+Se verificaron las tres páginas en el navegador:
+Tienda - PROD - grupo 0, Blog - PROD - grupo 0
+y Docs - PROD - grupo 0.
+
+La salida final del apply no se conservó en las evidencias compartidas.
+Aprobación del revisor: pendiente de registrar lo ocurrido realmente.
+
+#### Verificación conjunta
+
+```text
+> terraform workspace list
+  default
+  dev
+* prod
+  staging
+```
+
+docker ps mostró los siete sitios y el backend:
+
+```text
+NAMES               IMAGE                PORTS
+tienda-g0-prod      65645c7bb6a0         0.0.0.0:8301->80/tcp
+docs-g0-prod        65645c7bb6a0         0.0.0.0:8303->80/tcp
+blog-g0-prod        65645c7bb6a0         0.0.0.0:8302->80/tcp
+tienda-g0-staging   a8b39bd9cf0f         0.0.0.0:8201->80/tcp
+docs-g0-staging     a8b39bd9cf0f         0.0.0.0:8203->80/tcp
+blog-g0-staging     a8b39bd9cf0f         0.0.0.0:8202->80/tcp
+tienda-g0-dev       a8b39bd9cf0f         0.0.0.0:8101->80/tcp
+tf-state-g0         postgres:17-alpine   0.0.0.0:5433->5432/tcp, [::]:5433->5432/tcp
+```
+
+Consulta de los states:
+
+```text
+> docker exec tf-state-g0 psql -U terraform -d terraform_backend -c "SELECT id, name FROM terraform_remote_state.states ORDER BY id;"
+ id |  name
+----+---------
+  1 | default
+  4 | dev
+  6 | staging
+  9 | prod
+(4 rows)
+```
+
+#### Protección contra uso de default
+
+Se seleccionó default y se ejecutó terraform plan:
+
+```text
+Error: Invalid index
+
+22: amb = local.ambientes[local.entorno]
+
+local.ambientes is object with 3 attributes
+local.entorno is "default"
+
+The given key does not identify an element in this collection value.
+```
+
+Después se volvió a prod.
+
+La búsqueda de la contraseña de ejemplo con git grep no produjo
+resultados. Esta búsqueda comprueba esa cadena concreta, no constituye
+un escaneo general de secretos.
 
 ### Respuestas
 
-1. ¿Qué respondió la terminal 2 durante la prueba de bloqueo y qué problema evita?
+1. ¿Qué respondió la terminal 2 en la prueba de bloqueo? ¿Qué problema de trabajo en equipo evita?
 
-   Pendiente.
+   Informó que default ya estaba bloqueado. Evita operaciones
+   concurrentes sobre el mismo state que puedan provocar
+   inconsistencias o sobrescrituras.
 
 2. ¿Dónde quedó la contraseña del backend y por qué no debe estar en main.tf?
 
-   Pendiente.
+   Para Terraform, la conexión quedó en PG_CONN_STR de la terminal.
+   Docker recibió la contraseña mediante una variable de entorno
+   al crear PostgreSQL. No se escribió en main.tf ni en la bitácora
+   porque Git conservaría el secreto en su historial.
 
-3. ¿Qué filas tiene states y cómo se relacionan con los workspaces?
+3. ¿Qué filas tiene ahora la tabla states y cómo se relacionan con los workspaces?
 
-   Pendiente.
+   Tiene default, dev, staging y prod. Cada fila corresponde al
+   state de un workspace. Default conserva su registro, aunque
+   sus recursos fueron destruidos antes de crear los ambientes.
 
-4. ¿Qué error produce plan en default y por qué es útil que falle?
+4. ¿Qué error da terraform plan en default y por qué es útil que falle?
 
-   Pendiente.
+   Produce Invalid index porque default no está definido en
+   local.ambientes. Obliga a elegir explícitamente un ambiente
+   válido antes de planificar.
 
-5. ¿Por qué dev tiene un sitio, staging replica prod y prod utiliza otra versión de imagen?
+5. ¿Por qué dev tiene un solo sitio y staging replica a prod? ¿Por qué prod usa otra versión de imagen?
 
-   Pendiente.
+   Dev utiliza menos recursos para facilitar las pruebas.
+   Staging reproduce la composición de prod para validar cambios
+   antes de promoverlos. Dev y staging prueban nginx 1.28,
+   mientras prod conserva 1.27 hasta validar la nueva versión.
 
-6. ¿Qué riesgo implica compartir código y backend frente a utilizar carpetas separadas por ambiente?
+6. Los tres ambientes comparten código y backend. ¿Qué riesgo tiene eso frente a usar carpetas separadas por ambiente?
 
-   Pendiente.
+   Un cambio en el código compartido puede afectar a varios
+   ambientes al aplicarse en ellos. También existe el riesgo
+   de seleccionar el workspace equivocado. Los states están
+   separados, pero los workspaces no constituyen por sí solos
+   una separación de permisos ni eliminan la dependencia del
+   backend compartido.
+
 
 ## Fase 8 - Testing y calidad
 
