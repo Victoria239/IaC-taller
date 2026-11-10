@@ -1,11 +1,7 @@
-output "url" {
-  value = "http://localhost:${var.puerto}"
-}
-
-output "contenedor" {
-  value = docker_container.web.name
-}
-
-output "red_driver" {
-  value = data.docker_network.bridge.driver
+output "urls" {
+  value = {
+    tienda = module.tienda.url
+    blog   = module.blog.url
+    docs   = module.docs.url
+  }
 }

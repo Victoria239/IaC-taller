@@ -853,37 +853,113 @@ Estos planes de prueba no se aplicaron. El servidor conservó el puerto 8080.
 
 ### Evidencias
 
-Pendiente de ejecución.
+Se creó el módulo reutilizable infra/modules/sitio_web con:
+- versions.tf: origen del provider kreuzwerker/docker.
+- variables.tf: nombre, mensaje, imagen y puerto, con validación.
+- main.tf: imagen, contenedor y contenido HTML.
+- outputs.tf: URL y nombre real del contenedor.
 
-Registrar:
-- Archivos del módulo y TODO completos.
-- terraform init.
-- Línea Plan: y explicación de creaciones y destrucciones.
-- Aprobación y resultado del despliegue.
-- Verificación de tienda, blog y docs.
-- terraform output urls.
-- Commit de la fase.
+Desde la raíz se invocó el mismo módulo tres veces:
+tienda, blog y docs. Se eliminaron los recursos anteriores
+de la raíz y las variables, locales y outputs que ya no se usaban.
 
-Si se realiza el reto opcional, documentar la migración con for_each
-y moved sin destrucciones.
+#### Inicialización y validación
+
+```text
+Terraform has been successfully initialized!
+
+Success! The configuration is valid.
+```
+
+terraform fmt -recursive terminó sin mostrar archivos modificados.
+
+#### Plan de migración a módulos
+
+```text
+Plan: 6 to add, 0 to change, 2 to destroy.
+```
+
+Se propuso eliminar docker_container.web y docker_image.nginx,
+porque ya no estaban declarados en la raíz. Se propuso crear
+una imagen gestionada y un contenedor dentro de cada módulo.
+
+Los tres recursos docker_image utilizan la misma imagen
+nginx:1.28-alpine; no representan tres servidores adicionales.
+
+Aprobación del revisor: pendiente de registrar lo ocurrido realmente.
+
+La salida final del apply no se conservó en las evidencias
+compartidas. El despliegue se verificó mediante las páginas,
+los outputs y el plan posterior.
+
+#### Verificación de páginas
+
+Se comprobaron las tres páginas en el navegador:
+
+| Sitio | URL | Mensaje observado |
+|---|---|---|
+| Tienda | http://localhost:8081 | Tienda del grupo 0 |
+| Blog | http://localhost:8082 | Blog del grupo 0 |
+| Documentación | http://localhost:8083 | Documentacion del grupo 0 |
+
+El número 0 continúa siendo provisional.
+
+#### Outputs
+
+```text
+> terraform output urls
+{
+  "blog" = "http://localhost:8082"
+  "docs" = "http://localhost:8083"
+  "tienda" = "http://localhost:8081"
+}
+```
+
+#### Plan posterior
+
+El refresco consultó los recursos de module.tienda, module.blog
+y module.docs. El resultado fue:
+
+```text
+No changes. Your infrastructure matches the configuration.
+```
+
+El reto opcional de migración con for_each y moved no se ha realizado.
 
 ### Respuestas
 
-1. ¿Cuál fue la línea Plan: del paso 8? ¿Qué se destruyó, qué se creó y por qué?
+1. Anoten la línea Plan: del paso 8. ¿Qué se destruyó, qué se creó y por qué?
 
-   Pendiente.
+   El plan fue: 6 to add, 0 to change, 2 to destroy.
+   Se eliminaron los dos recursos anteriores de la raíz y se
+   crearon seis recursos dentro de tres módulos: una imagen
+   gestionada y un contenedor por sitio. Terraform distingue
+   los recursos por su dirección en la configuración; los
+   recursos nuevos están dentro de module.tienda, module.blog
+   y module.docs.
 
-2. ¿Qué error aparecería si el módulo no tuviera versions.tf?
+2. ¿Qué error obtendrían si el módulo no tuviera versions.tf?
 
-   Pendiente.
+   Sin otra declaración equivalente de required_providers,
+   Terraform intentaría buscar hashicorp/docker en lugar de
+   kreuzwerker/docker. La inicialización fallaría porque el
+   provider Docker utilizado no pertenece a HashiCorp.
 
-3. Para agregar una etiqueta a todos los sitios, ¿cuántos archivos se modifican con un módulo? ¿Cuántos bloques se modificarían copiando y pegando?
+3. Si mañana hay que agregar una etiqueta a todos los sitios, ¿cuántos archivos tocan con módulo? ¿Cuántos bloques habrían tocado copiando y pegando?
 
-   Pendiente.
+   Para una etiqueta común bastaría modificar el recurso del
+   módulo en un archivo: modules/sitio_web/main.tf.
+   Con recursos copiados habría que modificar tres bloques
+   de contenedor y mantenerlos consistentes.
 
-4. ¿Qué necesitaría otro grupo para usar el módulo sin copiar la carpeta?
+4. ¿Qué necesitaría otro grupo para usar su módulo sin copiar la carpeta?
 
-   Pendiente.
+   Acceso a un repositorio Git que publique el módulo y una
+   referencia a su ubicación mediante source, preferiblemente
+   fijada a una versión o commit. También necesitaría configurar
+   el provider, suministrar las variables y ejecutar terraform init.
+
+
 
 ## Fase 7 - State remoto y ambientes
 
