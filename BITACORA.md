@@ -720,33 +720,134 @@ pendiente de confirmar.
 
 ### Evidencias
 
-Pendiente de ejecución.
+Se organizó la configuración en main.tf, variables.tf, locals.tf,
+data.tf, outputs.tf y terraform.tfvars.
 
-Registrar:
-- Separación del código y resolución de los TODO.
-- Plan, explicación del reemplazo y aprobación.
-- Página personalizada y tres outputs.
-- Resultados de terraform console.
-- Validación con puerto 9500 y plan con puerto 8085, sin aplicarlos.
-- Commit de la fase.
+Se completaron los cinco TODO:
+- Variable mensaje de tipo string y sin default.
+- Mapa local.etiquetas.
+- Bloque dynamic "labels".
+- Output contenedor.
+- Output red_driver.
+
+Se utiliza grupo = 0 provisionalmente porque el docente todavía
+no ha asignado el número del grupo.
+
+#### Formato, validación y plan
+
+terraform fmt terminó sin mostrar archivos modificados.
+
+```text
+Success! The configuration is valid.
+```
+
+El plan propuso reemplazar el contenedor por el cambio de nombre,
+las etiquetas y el contenido HTML:
+
+```text
+name = "web-gN" -> "web-g0" # forces replacement
+
+Plan: 1 to add, 0 to change, 1 to destroy.
+```
+
+Aprobación del revisor: pendiente de registrar lo ocurrido realmente.
+
+Después del despliegue se obtuvieron las tres salidas:
+
+```text
+> terraform output
+contenedor = "web-g0"
+red_driver = "bridge"
+url = "http://localhost:8080"
+```
+
+El plan posterior respondió:
+
+```text
+No changes. Your infrastructure matches the configuration.
+```
+
+Verificación del mensaje personalizado en el navegador:
+pendiente de confirmar y registrar.
+
+#### Consultas de consola
+
+```text
+> local.nombre
+"web-g0"
+
+> upper(var.mensaje)
+"HOLA DESDE NUESTRO GRUPO - NUMERO PENDIENTE"
+
+> format("web-g%02d", var.grupo)
+"web-g00"
+
+> local.etiquetas
+{
+  "curso" = "arquitectura-sw-2"
+  "grupo" = "0"
+}
+
+> data.docker_network.bridge.driver
+"bridge"
+```
+
+#### Validación del puerto
+
+```text
+> terraform plan "-var=puerto=9500"
+
+Planning failed. Terraform encountered an error while generating this plan.
+
+Error: Invalid value for variable
+var.puerto is 9500
+
+El puerto debe estar entre 8000 y 8999.
+```
+
+Con un puerto dentro del rango:
+
+```text
+> terraform plan "-var=puerto=8085"
+
+external = 8080 -> 8085 # forces replacement
+
+Plan: 1 to add, 0 to change, 1 to destroy.
+
+Changes to Outputs:
+  ~ url = "http://localhost:8080" -> "http://localhost:8085"
+```
+
+Estos planes de prueba no se aplicaron. El servidor conservó el puerto 8080.
 
 ### Respuestas
 
-1. ¿Qué valor gana entre default, terraform.tfvars y -var?
+1. puerto tiene un default, puede venir de terraform.tfvars y se pasó con -var. ¿Qué valor gana cuando hay varios?
 
-   Pendiente.
+   Entre estas tres fuentes, -var tiene prioridad sobre
+   terraform.tfvars, y terraform.tfvars sobre el default.
+   En la prueba, -var permitió planificar con 8085 sin cambiar
+   el default 8080 ni modificar los archivos.
 
-2. ¿Qué hizo validation con el puerto 9500 y en qué se parece a Policy as Code?
+2. ¿Qué hizo validation con el puerto 9500? ¿En qué se parece a Policy as Code?
 
-   Pendiente.
+   Detuvo la generación del plan porque el valor estaba fuera
+   del rango permitido. Se parece a Policy as Code porque expresa
+   una regla en código y bloquea automáticamente configuraciones
+   que no la cumplen antes de aplicar cambios.
 
-3. ¿Terraform creó la red bridge? ¿Qué le pasará cuando se ejecute destroy?
+3. ¿Terraform creó la red bridge? ¿Qué le pasará cuando el grupo ejecute destroy?
 
-   Pendiente.
+   No la creó. El data source consultó una red existente.
+   Terraform no destruirá esa red porque no es un recurso
+   gestionado por esta configuración.
 
-4. ¿Qué aporta local.nombre frente a repetir el nombre literal?
+4. ¿Qué ganan con local.nombre frente a escribir "web-gN" en cada lugar?
 
-   Pendiente.
+   Centralizamos la regla para construir el nombre a partir
+   del número del grupo. Evitamos repetir valores y reducimos
+   el riesgo de inconsistencias al cambiarlo.
+
 
 ## Fase 6 - Módulos
 
