@@ -298,34 +298,130 @@ clickops-gN y accesible mediante http://localhost:8090.
 
 ### Evidencias
 
-Pendiente de ejecución.
+Se creó infra/main.tf con el provider kreuzwerker/docker,
+la imagen nginx:1.27-alpine, el contenedor web-gN y el output url.
 
-Registrar init, fmt, validate, plan, aprobación del revisor, apply,
-terraform output, verificación de la página y docker ps.
-Comprobar que se versiona .terraform.lock.hcl y se excluyen state
-y .terraform/. Registrar el commit de la fase.
+#### Inicialización
+
+Se ejecutó terraform init correctamente. Fragmentos de la salida:
+
+```text
+Terraform has created a lock file .terraform.lock.hcl to record the provider
+selections it made above.
+
+Terraform has been successfully initialized!
+```
+
+#### Formato y validación
+
+```text
+PS C:\Users\victo\Documents\iac-taller-gN\infra> terraform fmt
+PS C:\Users\victo\Documents\iac-taller-gN\infra> terraform validate
+Success! The configuration is valid.
+```
+
+terraform fmt terminó sin mostrar archivos modificados.
+
+#### Plan
+
+Se ejecutó terraform plan. Propuso crear docker_image.nginx
+y docker_container.web:
+
+```text
+Plan: 2 to add, 0 to change, 0 to destroy.
+
+Changes to Outputs:
+  + url = "http://localhost:8080"
+```
+
+Revisión humana: pendiente de registrar quién revisó el plan
+y la aprobación realmente expresada antes del apply.
+
+#### Aplicación
+
+Se ejecutó terraform apply y se confirmó con yes.
+
+Extractos de la salida:
+
+```text
+docker_image.nginx: Creation complete after 23s
+docker_container.web: Creation complete after 31s
+
+Apply complete! Resources: 2 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+url = "http://localhost:8080"
+```
+
+La imagen terminó de gestionarse antes de crear el contenedor.
+
+#### Verificación del servidor
+
+```text
+PS C:\Users\victo\Documents\iac-taller-gN\infra> terraform output
+url = "http://localhost:8080"
+```
+
+docker ps --filter "name=web-gN" mostró el contenedor web-gN
+en ejecución, con el puerto 0.0.0.0:8080->80/tcp.
+
+Se abrió http://localhost:8080 y apareció «Welcome to nginx!».
+
+#### Comprobación de archivos
+
+```text
+PS C:\Users\victo\Documents\iac-taller-gN\infra> git status --short --untracked-files=all
+?? .terraform.lock.hcl
+?? main.tf
+```
+
+```text
+PS C:\Users\victo\Documents\iac-taller-gN\infra> git check-ignore .terraform terraform.tfstate
+.terraform
+terraform.tfstate
+```
+
+Se comprobó que main.tf y .terraform.lock.hcl pueden versionarse,
+mientras que el directorio .terraform y el state están ignorados.
 
 ### Respuestas
 
 1. Pidieron un solo servidor. ¿Cuántos recursos creó el plan y por qué?
 
-   Pendiente.
+   Creó dos recursos gestionados por Terraform: docker_image.nginx
+   y docker_container.web. Uno representa la imagen utilizada y el
+   otro el contenedor que ejecuta el servidor. No son dos servidores.
+   Aunque la imagen ya estaba descargada, Terraform comenzó a
+   gestionarla como un recurso de esta configuración.
 
 2. El contenedor usa docker_image.nginx.image_id. ¿Qué orden de creación impone esa referencia? Relacionarlo con «Qué ocurre cuando aplicas».
 
-   Pendiente.
+   La referencia establece una dependencia implícita: Terraform debe
+   gestionar primero la imagen y obtener su identificador para crear
+   el contenedor. Terraform interpreta el código, calcula el plan
+   y utiliza el provider para ejecutar las operaciones contra Docker.
 
 3. ¿Qué descargó terraform init, dónde lo guardó y para qué sirve .terraform.lock.hcl?
 
-   Pendiente.
+   Inicializó la configuración e instaló el provider kreuzwerker/docker
+   dentro del directorio .terraform. El archivo .terraform.lock.hcl
+   registra la versión seleccionada del provider y sus comprobaciones
+   de integridad, para mantener selecciones consistentes entre
+   inicializaciones. Ese archivo sí se incluye en Git.
 
 4. De los cuatro bloques de «Cómo se escribe Terraform», ¿cuál no aparece todavía en el archivo?
 
-   Pendiente.
+   Falta variable. La configuración ya incluye provider, resource
+   y output, pero todavía utiliza valores fijos.
 
 5. Comparando con la fase 1, ¿dónde quedó registrado ahora lo que hicieron?
 
-   Pendiente.
+   La infraestructura deseada está descrita en infra/main.tf.
+   El archivo .terraform.lock.hcl registra la selección del provider.
+   Ambos se incorporarán al historial de Git con el commit de esta fase.
+   Las evidencias y explicaciones quedan en BITACORA.md.
+
 
 ## Fase 3 - Idempotencia y estado
 
