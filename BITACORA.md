@@ -1288,81 +1288,201 @@ un escaneo general de secretos.
 
 ### Evidencias
 
-Pendiente de ejecución.
+#### Pruebas del módulo
 
-Registrar:
-- Resultados de fmt y validate.
-- Cuatro pruebas aprobadas.
-- Observación del contenedor temporal durante despliegue_real.
-- Escaneo completo antes y después de la corrección.
-- Identificadores y cantidad de controles fallidos.
-- Ejecución exitosa de validar.sh.
-- Fallo del script al introducir formato incorrecto.
-- Fallo del script al permitir acceso público al bucket.
-- Restauración del código correcto.
-- Commit de la fase.
+Se creó modules/sitio_web/tests/sitio_web.tftest.hcl con
+cuatro pruebas:
 
-El archivo de AWS solo se escanea; no se aplica.
+```text
+run "url_coherente_con_puerto"... pass
+run "rechaza_puerto_fuera_de_rango"... pass
+run "despliegue_real"... pass
+run "nombre_coherente"... pass
+
+tests\sitio_web.tftest.hcl... tearing down
+tests\sitio_web.tftest.hcl... pass
+
+Success! 4 passed, 0 failed.
+```
+
+La prueba despliegue_real creó infraestructura temporal y Terraform
+completó su limpieza al terminar.
+
+Observación directa con docker ps durante la prueba:
+pendiente de registrar si se realizó.
+
+#### Escaneo de seguridad
+
+Se instaló Checkov 3.4.4 y se creó seguridad/bucket.tf como
+ejemplo de AWS destinado exclusivamente al análisis estático.
+No se aplicó ni se utilizó una cuenta de AWS.
+
+Inicialmente los cuatro atributos de bloqueo público estaban
+en false.
+
+```text
+Passed checks: 4, Failed checks: 11, Skipped checks: 0
+```
+
+Controles fallidos iniciales:
+
+```text
+CKV_AWS_53
+CKV_AWS_54
+CKV_AWS_55
+CKV_AWS_56
+CKV2_AWS_62
+CKV2_AWS_61
+CKV_AWS_18
+CKV_AWS_144
+CKV2_AWS_6
+CKV_AWS_21
+CKV_AWS_145
+```
+
+Se cambiaron a true:
+
+```hcl
+block_public_acls       = true
+block_public_policy     = true
+ignore_public_acls      = true
+restrict_public_buckets = true
+```
+
+El segundo escaneo completo mostró:
+
+```text
+Passed checks: 9, Failed checks: 6, Skipped checks: 0
+```
+
+Fallos restantes:
+
+| Control | Aspecto pendiente |
+|---|---|
+| CKV2_AWS_62 | Notificaciones de eventos |
+| CKV2_AWS_61 | Configuración de ciclo de vida |
+| CKV_AWS_18 | Registro de accesos |
+| CKV_AWS_144 | Replicación entre regiones |
+| CKV_AWS_21 | Versionado |
+| CKV_AWS_145 | Cifrado predeterminado con KMS |
+
+También pasó CKV2_AWS_6 al corregir las protecciones de acceso público.
+
+Se ejecutó el escaneo limitado a la política del taller:
+
+```powershell
+checkov -d seguridad --compact --check CKV_AWS_53,CKV_AWS_54,CKV_AWS_55,CKV_AWS_56
+```
+
+```text
+Passed checks: 4, Failed checks: 0, Skipped checks: 0
+```
+
+#### Mini pipeline
+
+Se creó validar.sh con set -e para encadenar:
+1. terraform fmt -check -recursive.
+2. terraform validate.
+3. terraform test del módulo.
+4. Checkov con los cuatro controles de acceso público.
+
+Se ejecutó desde la raíz mediante Git Bash:
+
+```powershell
+& "C:\Program Files\Git\bin\bash.exe" validar.sh
+```
+
+Resultado:
+
+```text
+1. Verificando formato
+2. Validando configuracion
+Success! The configuration is valid.
+
+3. Ejecutando pruebas del modulo
+Success! 4 passed, 0 failed.
+
+4. Comprobando politica de acceso publico
+Passed checks: 4, Failed checks: 0, Skipped checks: 0
+
+Validación completa: el cambio puede pasar a revisión
+```
+
+#### Fallo intencional de formato
+
+Se desordenó la declaración de tipo numérico en variables.tf
+y se ejecutó el pipeline:
+
+```text
+1. Verificando formato
+variables.tf
+Codigo de salida por formato: 3
+```
+
+El script se detuvo en el primer paso. Se restauró el formato
+con terraform -chdir=infra fmt.
+
+#### Fallo intencional de seguridad
+
+Se cambió temporalmente block_public_acls a false.
+
+Formato, validación y las cuatro pruebas aprobaron, pero
+el escaneo produjo:
+
+```text
+Passed checks: 3, Failed checks: 1, Skipped checks: 0
+
+Check: CKV_AWS_53
+FAILED for resource: aws_s3_bucket_public_access_block.evidencias
+
+Codigo de salida por seguridad: 1
+```
+
+El script no mostró su mensaje final de validación completa.
+
+Se restauró bucket.tf con los cuatro valores en true y se
+repitió el escaneo de la política:
+
+```text
+Passed checks: 4, Failed checks: 0, Skipped checks: 0
+```
+
+El reto opcional de GitHub Actions no se ha realizado.
 
 ### Respuestas
 
-1. ¿Qué encontró cada nivel de validación que los demás no podían encontrar?
+1. ¿Qué encontró cada nivel que los otros no podían encontrar?
 
-   Pendiente.
+   El análisis estático comprobó formato y validez de la
+   configuración. Las pruebas verificaron outputs, rechazo de
+   entradas inválidas y un despliegue real del módulo. El escaneo
+   detectó configuraciones de seguridad que pueden ser válidas
+   sintácticamente y aun así incumplir políticas.
 
-2. ¿Qué se observó con docker ps durante despliegue_real y por qué sirve un entorno desechable?
+2. ¿Qué vio quien observaba docker ps durante despliegue_real? ¿Por qué vale la pena un entorno desechable?
 
-   Pendiente.
+   Observación directa: pendiente de registrar si se realizó.
+   La salida de terraform test confirmó la ejecución de la prueba
+   real y su limpieza posterior. Un entorno desechable permite
+   comprobar el despliegue sin modificar los ambientes existentes
+   y elimina los recursos de prueba al terminar.
 
-3. ¿Qué controles fallaron, cuántos quedaron después de corregir y cuáles corresponden a «sin buckets públicos»?
+3. ¿Qué controles fallaron y cuántos quedaron después de corregir? ¿Cuáles corresponden a «sin buckets públicos»?
 
-   Pendiente.
+   Inicialmente fallaron 11 controles y después quedaron 6.
+   CKV_AWS_53, CKV_AWS_54, CKV_AWS_55 y CKV_AWS_56 verifican
+   las cuatro protecciones de acceso público utilizadas como
+   política del pipeline. Los cuatro aprobaron tras la corrección.
 
-4. ¿Qué ventaja tiene detectar problemas antes del apply frente a encontrarlos en la nube?
+4. ¿Qué ventaja tiene detectar un problema antes del apply?
 
-   Pendiente.
+   Permite corregirlo antes de desplegar infraestructura con una
+   configuración insegura, reduciendo exposición, retrabajo y
+   posibles costos. Estas comprobaciones no garantizan por sí
+   solas que toda la infraestructura sea segura.
 
-5. ¿En qué etapa del pipeline va validar.sh y qué paso humano viene después?
+5. ¿En qué paso del pipeline va validar.sh y qué paso humano viene después?
 
-   Pendiente.
-
-## Fase 9 - Auditoría y cierre
-
-### Evidencias
-
-Pendiente de ejecución y de asignación del grupo para auditoría.
-
-Registrar:
-- Grupo y repositorio auditados.
-- AUDITORIA.md con los seis anti-patrones evaluados con evidencia.
-- Dos hallazgos concretos con archivo y línea.
-- Una recomendación aplicable.
-- Entrega del informe al grupo auditado.
-- Observaciones recibidas sobre nuestro repositorio.
-- Planes y aprobaciones de destrucción de dev, staging y prod.
-- Verificación de que solo queda el backend del taller.
-- Eliminación del backend después de destruir los ambientes.
-- Verificación de que no quedan contenedores del grupo.
-- Commit fase-9 y publicación en GitHub.
-
-### Respuestas
-
-1. ¿Qué anti-patrón encontraron en el otro grupo y cuál les señalaron a ustedes?
-
-   Pendiente.
-
-2. ¿Qué habría pasado si eliminaban el backend antes de ejecutar los destroy?
-
-   Pendiente.
-
-3. ¿Por qué destroy exige la misma disciplina de lectura que apply?
-
-   Pendiente.
-
-## Socialización
-
-Pendiente.
-
-Preparar una intervención de tres minutos sobre:
-- Un hallazgo técnico que sorprendió al grupo.
-- El anti-patrón más importante encontrado en la auditoría.
+   Corresponde a la etapa Validar. Después viene la revisión
+   humana del cambio y del plan propuesto antes de autorizar
+   su aplicación.
