@@ -1486,3 +1486,57 @@ El reto opcional de GitHub Actions no se ha realizado.
    Corresponde a la etapa Validar. Después viene la revisión
    humana del cambio y del plan propuesto antes de autorizar
    su aplicación.
+
+
+## Fase 9 - Cierre de infraestructura
+
+### Evidencias
+
+Se eliminaron los ambientes en el orden dev, staging y prod,
+manteniendo PostgreSQL disponible hasta terminar.
+
+| Workspace | Plan revisado | Resultado |
+|---|---|---|
+| dev | 0 a crear, 0 a cambiar, 2 a destruir | 2 recursos destruidos |
+| staging | 0 a crear, 0 a cambiar, 6 a destruir | 6 recursos destruidos |
+| prod | 0 a crear, 0 a cambiar, 6 a destruir | 6 recursos destruidos |
+
+Después de cada destrucción, terraform state list no mostró recursos
+en el ambiente correspondiente.
+
+Aprobaciones del revisor: registrar las realizadas efectivamente.
+
+Se regresó al workspace default:
+
+```text
+Switched to workspace "default".
+```
+
+Antes de eliminar el backend, solo quedaba:
+
+```text
+NAMES         STATUS
+tf-state-g0   Up 20 minutes
+```
+
+Se eliminó el backend y se comprobó que no quedaban contenedores
+del taller, incluidos los detenidos:
+
+```text
+> docker ps -a --filter "name=g0" --format "table {{.Names}}\t{{.Status}}"
+NAMES     STATUS
+```
+
+### Respuestas sobre el cierre
+
+1. ¿Qué habría pasado si eliminaban el backend antes de ejecutar los destroy?
+
+   Terraform habría perdido el acceso al state remoto necesario
+   para identificar y gestionar los recursos. Habría sido necesario
+   recuperar ese state para completar la limpieza de forma controlada.
+
+2. ¿Por qué destroy exige la misma disciplina de lectura que apply?
+
+   Porque elimina recursos. Revisar el workspace, las direcciones
+   y el resumen del plan permite comprobar que solo se destruye
+   la infraestructura prevista.
